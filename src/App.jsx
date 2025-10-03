@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { api } from "./services/api";
+import api  from "./services/api";
 
 /*
  App.jsx
@@ -84,7 +84,7 @@ export default function App() {
             <span style={{
               width: 10, height: 10, borderRadius: 6,
               background: pushEnabled ? "#10b981" : "#ef4444",
-              display: "inline-block"
+              display: "inline-block" 
             }} />
             <small style={{ color: "#374151" }}>{pushEnabled ? "Push: Ativo" : "Push: Inativo"}</small>
           </div>
