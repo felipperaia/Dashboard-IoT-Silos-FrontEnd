@@ -1,5 +1,5 @@
 [build]
-  publish = "vite-react/dist"
+  publish = "dist"
   command = "npm run build"
 
 [dev]
