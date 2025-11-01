@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router,Navigate, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import api from "./services/api";
 import imgSilos from "./assets/silos-2.jpg";
-import "./App.css";
+import "./app.css";
 import { Header } from "./components/Header";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
