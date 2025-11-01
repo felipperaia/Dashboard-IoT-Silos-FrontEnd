@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
 export default function Settings() {
   const [profile, setProfile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const raw = localStorage.getItem("current_user");
@@ -18,12 +20,19 @@ export default function Settings() {
   const save = async () => {
     setSaving(true);
     try {
-      // TODO: chamar API para atualizar perfil
+        // Atualiza o perfil no backend
+    await api.put(`/users/me`, {
+          name: profile.name,
+          email: profile.email,
+          phone: profile.phone
+        });
+      
+        // Atualiza localmente após sucesso no backend
       localStorage.setItem("current_user", JSON.stringify(profile));
-      alert("Perfil salvo localmente.");
+        alert("Perfil atualizado com sucesso!");
     } catch (e) {
       console.error(e);
-      alert("Erro ao salvar");
+        alert("Erro ao salvar: " + (e.response?.data?.detail || e.message));
     } finally { setSaving(false); }
   };
 
@@ -44,6 +53,7 @@ export default function Settings() {
         </label>
         <div>
           <button onClick={save} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</button>
+          <button onClick={() => navigate('/mfa')} style={{ marginLeft: 12 }}>Configurar MFA</button>
         </div>
       </div>
     </div>

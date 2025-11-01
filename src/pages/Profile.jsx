@@ -7,7 +7,7 @@ export default function Profile() {
   const logout = () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("current_user");
-    window.location.href = "/login";
+    window.location.href = "https://dashboardsilo.netlify.app/";
   };
 
   if (!user) return <div className="panel">Nenhum usuário ativo</div>;

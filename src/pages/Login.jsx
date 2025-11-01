@@ -35,7 +35,8 @@ export default function Login({ onLoginSuccess }) {
   }
 
   try {
-    const response = await fetch(`${API_URL}/api/auth/login`, {
+    // Primeiro passo: chama /login-step que retorna mfa_required ou tokens diretos
+    const response = await fetch(`${API_URL}/api/auth/login-step`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password })
@@ -43,11 +44,26 @@ export default function Login({ onLoginSuccess }) {
 
     if (!response.ok) throw new Error("Falha na autenticação");
 
-      const data = await response.json();
-      const token = data.access_token;
+    const data = await response.json();
 
-    if (!token) throw new Error("Token não encontrado");
+    if (data.mfa_required) {
+      // Pedido de MFA: pergunta o código ao usuário antes de emitir tokens
+      const code = window.prompt("Sua conta exige MFA. Digite o código do seu app autenticador:");
+      if (!code) throw new Error("Código MFA não fornecido");
 
+      const verifyResp = await fetch(`${API_URL}/api/auth/login-verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mfa_token: data.mfa_token, code })
+      });
+
+      if (!verifyResp.ok) {
+        const t = await verifyResp.text();
+        throw new Error(t || "Falha na verificação MFA");
+      }
+
+      const verifyData = await verifyResp.json();
+      const token = verifyData.access_token;
       localStorage.setItem("access_token", token);
       if (onLoginSuccess) onLoginSuccess(token);
 
@@ -61,8 +77,25 @@ export default function Login({ onLoginSuccess }) {
       } catch (e) {
         console.warn("Falha ao obter usuário /me:", e);
       }
-    if (onLoginSuccess) onLoginSuccess(token);
-    navigate("/dashboard");
+      navigate("/dashboard");
+    } else {
+      // Sem MFA: tokens diretos
+      const token = data.access_token;
+      if (!token) throw new Error("Token não encontrado");
+      localStorage.setItem("access_token", token);
+      if (onLoginSuccess) onLoginSuccess(token);
+
+      try {
+        const meResp = await fetch(`${API_URL}/api/auth/me`, { headers: { "Authorization": `Bearer ${token}` } });
+        if (meResp.ok) {
+          const me = await meResp.json();
+          try { localStorage.setItem("current_user", JSON.stringify(me)); } catch (e) { console.warn(e); }
+        }
+      } catch (e) {
+        console.warn("Falha ao obter usuário /me:", e);
+      }
+      navigate("/dashboard");
+    }
 
   } catch (err) {
     console.error("Erro no login:", err);

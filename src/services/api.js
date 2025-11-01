@@ -112,4 +112,9 @@ const api = {
   adminListSubscriptions: () => request("/notifications/admin/subscriptions")
 };
 
+// Método auxiliar PUT
+api.put = (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) });
+// Método auxiliar POST
+api.post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body) });
+
 export default api;

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Settings, Bell, User } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom"; // Added useLocation
+import { Settings, Bell, User, Home, MessageSquare } from "lucide-react"; // Added MessageSquare
 import axios from "axios";
 
 // 👉 Configuração base da API
 const API_BASE = "https://dashboard-iot-silos-backend-1.onrender.com";
-const getAuthToken = () => localStorage.getItem("token");
+const getAuthToken = () => localStorage.getItem("access_token");
 
 const getHeaders = () => ({
   Authorization: `Bearer ${getAuthToken()}`,
@@ -91,7 +91,7 @@ export const Header = ({ pushEnabled, unsubscribeAndLogout }) => {
   const getUserIdFromToken = (token) => {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.user_id || payload.id || null;
+      return payload.sub || payload.user_id || payload.id || null;
     } catch (error) {
       console.error("Erro ao decodificar token:", error);
       return null;
@@ -109,11 +109,23 @@ export const Header = ({ pushEnabled, unsubscribeAndLogout }) => {
         padding: "16px 0",
       }}
     >
-      <h1 style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#e0e0e0" }}>
+      <h1 style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#ffffff" }}>
         Deméter - Monitoring Dashboard
       </h1>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Voltar ao Dashboard */}
+        <button onClick={() => navigate("/dashboard")} style={buttonStyle}>
+          <Home size={18} />
+          <span style={{ fontSize: "14px" }}>Dashboard</span>
+        </button>
+
+        {/* Assistente Deméter (Chat) */}
+        <button onClick={() => navigate("/chat")} style={buttonStyle}>
+          <MessageSquare size={18} />
+          <span style={{ fontSize: "14px" }}>Assistente Deméter</span>
+        </button>
+
         {/* Configurações */}
         <button onClick={() => navigate("/settings")} style={buttonStyle}>
           <Settings size={18} />
@@ -143,8 +155,8 @@ export const Header = ({ pushEnabled, unsubscribeAndLogout }) => {
         <button onClick={() => navigate("/profile")} style={{ ...buttonStyle, gap: "8px" }}>
           <User size={18} />
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-            <span style={{ fontSize: "14px", fontWeight: "500" }}>{userName}</span>
-            <span style={{ fontSize: "12px", color: "#6b7280" }}>{userRole}</span>
+            <span style={{ fontSize: "14px", fontWeight: "500", color: "#ffffff" }}>{userName}</span>
+            <span style={{ fontSize: "12px", color: "#e5e7eb" }}>{userRole}</span>
           </div>
         </button>
       </div>
@@ -163,5 +175,5 @@ const buttonStyle = {
   gap: "6px",
   cursor: "pointer",
   transition: "all 0.2s",
-  color: "#4b5563",
+  color: "#ffffff",
 };

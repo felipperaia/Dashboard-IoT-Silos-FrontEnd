@@ -31,6 +31,16 @@ export default function MFA() {
         throw new Error(t || "Falha na verificação");
       }
       alert("MFA habilitado com sucesso");
+      // Atualizar usuário localmente
+      try {
+        const meResp = await fetch(`${API_URL}/auth/me`, { headers: { "Authorization": `Bearer ${localStorage.getItem("access_token")}` } });
+        if (meResp.ok) {
+          const me = await meResp.json();
+          localStorage.setItem("current_user", JSON.stringify(me));
+        }
+      } catch (e) {
+        console.warn("Falha ao atualizar current_user após MFA:", e);
+      }
     } catch (e) {
       console.error(e);
       alert("Código inválido");
