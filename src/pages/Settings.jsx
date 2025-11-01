@@ -20,7 +20,7 @@ export default function Settings() {
     try {
       // TODO: chamar API para atualizar perfil
       localStorage.setItem("current_user", JSON.stringify(profile));
-      alert("Perfil salvo localmente. Integre com endpoint /api/users/:id para persistir no backend.");
+      alert("Perfil salvo localmente.");
     } catch (e) {
       console.error(e);
       alert("Erro ao salvar");

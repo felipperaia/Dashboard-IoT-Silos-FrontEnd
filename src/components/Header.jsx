@@ -110,7 +110,7 @@ export const Header = ({ pushEnabled, unsubscribeAndLogout }) => {
       }}
     >
       <h1 style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#e0e0e0" }}>
-        Dashboard de Monitoramento - Silos
+        Deméter - Monitoring Dashboard
       </h1>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
