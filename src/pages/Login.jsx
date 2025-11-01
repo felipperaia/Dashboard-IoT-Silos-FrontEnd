@@ -1,49 +1,227 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/api"; // ✅ CORREÇÃO: Importação sem chaves
 
-/*
- Login.jsx
- Página de login simples. Salva access_token no localStorage.
-*/
 
-export default function Login() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState(null);
+export default function Login({ onLoginSuccess }) {
   const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    username: "",
+    password: ""
+  });
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    try {
-      const data = await api.login(username, password);
-      if (data && data.access_token) {
-        localStorage.setItem("access_token", data.access_token);
-        navigate("/dashboard");
-      } else {
-        setError("Resposta inesperada do servidor");
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const API_URL = 'https://dashboard-iot-silos-backend-1.onrender.com';
+
+  const handleSubmit = async (e) => {
+  if (e) e.preventDefault();
+  setLoading(true);
+  setError(null);
+
+  const { username, password } = formData;
+
+  if (!username.trim() || !password.trim()) {
+    setError("Por favor, preencha todos os campos");
+    setLoading(false);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    if (!response.ok) throw new Error("Falha na autenticação");
+
+      const data = await response.json();
+      const token = data.access_token;
+
+    if (!token) throw new Error("Token não encontrado");
+
+      localStorage.setItem("access_token", token);
+      if (onLoginSuccess) onLoginSuccess(token);
+
+      // buscar dados do usuário e armazenar para sessão consistente entre abas
+      try {
+        const meResp = await fetch(`${API_URL}/api/auth/me`, { headers: { "Authorization": `Bearer ${token}` } });
+        if (meResp.ok) {
+          const me = await meResp.json();
+          try { localStorage.setItem("current_user", JSON.stringify(me)); } catch (e) { console.warn(e); }
+        }
+      } catch (e) {
+        console.warn("Falha ao obter usuário /me:", e);
       }
-    } catch (err) {
-      setError(err.message || String(err));
+    if (onLoginSuccess) onLoginSuccess(token);
+    navigate("/dashboard");
+
+  } catch (err) {
+    console.error("Erro no login:", err);
+    setError(err.message || "Erro ao fazer login");
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      handleSubmit(e);
     }
   };
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", background: "#fff", padding: 24, borderRadius: 8 }}>
-      <h2>Login</h2>
-      <form onSubmit={submit}>
-        <div style={{ marginBottom: 8 }}>
-          <label>Usuário</label>
-          <input value={username} onChange={(e)=>setUsername(e.target.value)} style={{ width: "100%" }} />
+    <div style={{...styles.container, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "70vh", marginTop: "4rem" }}>
+      <h1 style={{...styles.title, marginBottom: "6rem" }}>Deméter - Monitoring Dashboard</h1>
+        <div style={styles.loginBox}>
+          <h2 style={{...styles.title}}>Acesse sua conta</h2>
+
+        <div style={styles.formContainer}>
+          <div style={styles.inputGroup}>
+            <label style={styles.label} htmlFor="username">
+              Usuário
+            </label>
+            <input
+              id="username"
+              type="text"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              onKeyPress={handleKeyPress}
+              disabled={loading}
+              style={styles.input}
+              autoComplete="username"
+              placeholder="Digite seu usuário"
+            />
+          </div>
+
+          <div style={styles.inputGroup}>
+            <label style={styles.label} htmlFor="password">
+              Senha
+            </label>
+            <input
+              id="password"
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              onKeyPress={handleKeyPress}
+              disabled={loading}
+              style={styles.input}
+              autoComplete="current-password"
+              placeholder="Digite sua senha"
+            />
+          </div>
+
+          {error && (
+            <div style={styles.error} role="alert">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{
+              ...styles.button,
+              ...(loading ? styles.buttonDisabled : {})
+            }}
+          >
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
         </div>
-        <div style={{ marginBottom: 8 }}>
-          <label>Senha</label>
-          <input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} style={{ width: "100%" }} />
-        </div>
-        {error && <div style={{ color: "red", marginBottom: 8 }}>{error}</div>}
-        <button type="submit">Entrar</button>
-      </form>
+      </div>
     </div>
   );
 }
+
+const styles = {
+  container: {
+    width: "30vw",
+    minWidth: "400px",
+    backgroundColor: "rgb(255, 255, 255)",
+    padding: "32px",
+    borderRadius: "8px",
+    height: "100vh",
+
+  },
+  loginBox: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: "8px",
+    display: "flex",
+    flexDirection: "column",
+    alignitems: "center",
+    justifyContent: "center",
+    margin: "0 auto",
+  },
+  title: {
+    fontSize: "24px",
+    fontWeight: "600",
+    marginBottom: "24px",
+    textAlign: "center",
+    color: "#333"
+  },
+  formContainer: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+    width: "75%",
+    margin: "auto",
+  },
+  inputGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px"
+  },
+  label: {
+    fontSize: "14px",
+    fontWeight: "500",
+    color: "#555"
+  },
+  input: {
+    width: "100%",
+    padding: "10px 12px",
+    fontSize: "14px",
+    border: "1px solid #ddd",
+    borderRadius: "4px",
+    outline: "none",
+    transition: "border-color 0.2s",
+    boxSizing: "border-box"
+  },
+  error: {
+    padding: "12px",
+    backgroundColor: "#fee",
+    color: "#c33",
+    borderRadius: "4px",
+    fontSize: "14px",
+    border: "1px solid #fcc"
+  },
+  button: {
+    width: "100%",
+    padding: "12px",
+    fontSize: "16px",
+    fontWeight: "500",
+    color: "#fff",
+    backgroundColor: "#22aa38",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer",
+    transition: "background-color 0.2s",
+    marginTop: "8px"
+  },
+  buttonDisabled: {
+    backgroundColor: "#6c757d",
+    cursor: "not-allowed",
+    opacity: 0.6
+  }
+};

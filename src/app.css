@@ -1,0 +1,32 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.background {
+    background-size: cover;
+    background-position: center;
+    background-color: rgba(0,0,0,0.35);
+    background-attachment: fixed; /* fixa a imagem para não "mover" */
+    color: #111; /* cor base do texto para contraste */
+}
+
+.main {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    width: 95vw;
+    justify-content: center;
+    margin: auto;
+
+}
+
+/* Painéis internos com leve transparência, mas texto íntegro */
+.panel {
+    background: rgba(255,255,255,0.92);
+    color: #111;
+    border-radius: 8px;
+    padding: 12px;
+}
+

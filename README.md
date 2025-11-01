@@ -1,4 +1,4 @@
-# Frontend — Silo Monitor (Vite + React PWA)
+# Frontend — Deméter - Monitoring Dashboard (Vite + React PWA)
 
 Este diretório deve se tornar o repositório `silo-monitor-frontend`.
 
@@ -22,7 +22,7 @@ Quickstart local
 
 3. Rodar em dev:
    npm run dev
-   Abra http://localhost:3000
+   Abra http://localhost:5173 (ou a porta exibida pelo Vite)
 
 Gerar VAPID keys (para Web Push)
 - Recomendado executar em frontend (ou raiz) via npx:
@@ -35,6 +35,13 @@ Configurar deploy (Netlify)
 - Build: npm run build
 - Publish directory: dist
 - Defina VITE_API_URL com a URL do backend (ex: https://api.seu-dominio.com/api)
+
+MFA / TOTP
+- A aplicação frontend tem suporte para configurar MFA (TOTP) usando o endpoint `/api/mfa/setup` e `/api/mfa/verify`.
+- Para testar localmente, habilite a rota `/api/mfa` no backend e use um app autenticador (Microsoft Authenticator ou Google Authenticator).
+
+Web Push (VAPID)
+- Gere chaves VAPID e configure no backend (VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY). O frontend consulta `/api/notifications/vapid_public` para registrar o service worker.
 
 .gitignore sugerido (crie no repo)
 # Node
