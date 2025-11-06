@@ -1,5 +1,5 @@
 // services/api.js - VERSÃO CORRETA
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api" || "https://dashboardsilo.netlify.app/api";
+const API_URL = import.meta.env.VITE_API_URL ||  "https://dashboard-iot-silos-backend-1.onrender.com/api";
 
 // Função para verificar se o token JWT está expirado
 const isTokenExpired = (token) => {
