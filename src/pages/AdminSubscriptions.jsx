@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import api from "../services/api"; // ✅ CORREÇÃO: Importação sem chaves
+import api from "./services/api"; // ✅ CORREÇÃO: Importação sem chaves
 /*
  AdminSubscriptions.jsx
  Página admin simples para listar push_subscriptions e permitir remoção.
