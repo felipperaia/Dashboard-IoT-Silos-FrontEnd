@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_URL = "https://dashboard-iot-silos-backend-1.onrender.com/api";
 
 export default function MFA() {
   const [setupData, setSetupData] = useState(null);
