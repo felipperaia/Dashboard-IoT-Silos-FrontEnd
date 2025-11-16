@@ -252,7 +252,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
   const unreadAlerts = alerts.filter(a => !a.acknowledged);
 
   return (
-    <div style={s.container}>
+    <Container>
       {/* Left Sidebar */}
       <div style={s.sidebar}>
         <div style={s.logo}>
@@ -310,7 +310,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
         {/* Notifications */}
         <div style={{...s.metricCard, background: unreadAlerts.length > 0 ? "linear-gradient(135deg, #fef3c7, #fed7aa)" : "#fff"}}>
           <div style={s.metricHeader}>
-            <span style={s.metricLabel}>Notificações</span>
+            <span style={s.metricLabelNot}>Notificações</span>
             {unreadAlerts.length > 0 && <span style={s.badge}>{unreadAlerts.length}</span>}
           </div>
           <div style={s.notificationList}>
@@ -337,19 +337,19 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
       </div>
 
       {/* Main Content */}
-      <div style={s.mainContent}>
+      <MainContent>
         <div style={s.header}>
           <div style={s.headerActions}>
           </div>
         </div>
         
-        <div style={s.tabs}>
+        <Tabs>
           {["dashboard", "silos", "readings", "alerts", "users"].map(tab => (
             <button key={tab} style={activeTab === tab ? s.tabActive : s.tab} onClick={() => setActiveTab(tab)}>
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
-        </div>
+        </Tabs>
 
         {activeTab === "dashboard" && (
           <div>
@@ -532,8 +532,9 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </MainContent>
+    </Container>
+      
   );
 }
 
@@ -541,6 +542,7 @@ const s = {
   container: { 
     display: "flex", 
     minHeight: "100vh", 
+    
   },
   sidebar: {
     width: 380,
@@ -574,6 +576,11 @@ const s = {
   metricLabel: {
     fontSize: 13,
     color: "#e6e6e6",
+    fontWeight: "500"
+  },
+    metricLabelNot: {
+    fontSize: 13,
+    color: "#000000",
     fontWeight: "500"
   },
   trendIcon: {
@@ -619,7 +626,7 @@ const s = {
   },
   trendLabel: {
     fontSize: 12,
-    color: "#444444"
+    color: "#e2e2e2"
   },
   trendValue: {
     fontSize: 12,
@@ -711,7 +718,7 @@ const s = {
     padding: "12px 24px",
     background: "transparent",
     border: "none",
-    color: "#64748b",
+    color: "#ececec",
     cursor: "pointer",
     fontSize: 14,
     fontWeight: "500",
@@ -779,9 +786,10 @@ const s = {
   },
   button: {
     padding: "12px 24px",
-    background: "linear-gradient(135deg, #238b28, #25eb35)",
+    background: "#238b28",
     color: "#fff",
     border: "none",
+    margin: 'auto',
     borderRadius: 8,
     cursor: "pointer",
     fontWeight: "600",
@@ -909,3 +917,51 @@ const s = {
     fontSize: 14
   }
 }
+
+import styled from "styled-components";
+
+const Container = styled.div`
+  display: flex;
+  min-height: 100vh;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
+`;
+
+const MainContent = styled.div` 
+    flex: 1;
+    padding: 30;
+    overflow-Y: "auto";
+    width: 70vw;
+    
+     @media (max-width: 768px) {
+    flex: 1;
+    margin: auto;
+    overflow-Y: "auto";
+    width: 80vw;
+    
+  }
+`
+
+const Tabs = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 25px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 2px;
+  justify-content: end;
+
+  @media (max-width: 768px) {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 25px;
+    border-bottom: 2px solid rgb(226, 232, 240);
+    padding-bottom: 2px;
+    justify-content: center;
+
+    button {
+      padding: 8px 12px!important;
+    }
+  }
+`;
