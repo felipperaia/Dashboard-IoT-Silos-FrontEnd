@@ -461,10 +461,10 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
                 </div>
                 {readings.slice(0, 20).map((reading, idx) => (
                   <div key={idx} style={s.tableRow}>
-                    <span>{silos.find(sl => sl._id === reading.silo_id)?.name || reading.silo_id}</span>
+                    <span style={{color: "#000"}}>{silos.find(sl => sl._id === reading.silo_id)?.name || reading.silo_id}</span>
                     <span style={{color: reading.temp_C > 30 ? "#ef4444" : "#10b981"}}>{reading.temp_C}°C</span>
                     <span style={{color: reading.rh_pct > 70 ? "#3b82f6" : "#10b981"}}>{reading.rh_pct}%</span>
-                    <span>{new Date(reading.timestamp).toLocaleString('pt-BR')}</span>
+                    <span style={{color: "#000"}}>{new Date(reading.timestamp).toLocaleString('pt-BR')}</span>
                   </div>
                 ))}
               </div>
