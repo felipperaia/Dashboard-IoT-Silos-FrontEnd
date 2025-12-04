@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/logo.png";
 
 
 export default function Login({ onLoginSuccess }) {
@@ -113,9 +114,10 @@ export default function Login({ onLoginSuccess }) {
 
   return (
     <div style={{...styles.container, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "70vh", marginTop: "4rem" }}>
-      <h1 style={{...styles.title, marginBottom: "6rem" }}>Deméter - Monitoring Dashboard</h1>
+      <h1 style={{...styles.title, marginBottom: "1rem" }}>Deméter - Monitoring Dashboard</h1>
+      <img src={logo} alt="Deméter Logo"/>
         <div style={styles.loginBox}>
-          <h2 style={{...styles.title}}>Acesse sua conta</h2>
+          <h2 style={{...styles.title, marginBottom:8}}>Acesse sua conta</h2>
 
         <div style={styles.formContainer}>
           <div style={styles.inputGroup}>
@@ -159,18 +161,37 @@ export default function Login({ onLoginSuccess }) {
               {error}
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading}
-            style={{
-              ...styles.button,
-              ...(loading ? styles.buttonDisabled : {})
-            }}
-          >
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{
+            ...styles.button,
+            ...(loading ? styles.buttonDisabled : {}),
+            padding: "10px 14px",
+            fontSize: "14px",
+            width: "50%",
+            maxWidth: "160px",
+            margin: "12px auto 0",
+            display: "block" 
+          }}
+        >
+          {loading ? "Entrando..." : "Entrar"}
+        </button>
+        <button
+        type="button"
+        onClick={() => navigate("/sobre-demeter")}
+        className="mt-4 w-full text-sm text-slate-200/80 hover:text-white underline text-center"
+        style={{
+            ...styles.button,
+            padding: "10px 14px",
+            fontSize: "14px",
+            width: "50%",
+            maxWidth: "160px",
+            margin: "12px auto 0",}}
+      >
+        Sobre Deméter
+        </button>
         </div>
       </div>
     </div>

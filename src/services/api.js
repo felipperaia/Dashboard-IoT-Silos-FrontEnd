@@ -1,5 +1,6 @@
-// services/api.js - VERSÃO CORRETA
-const API_URL = "https://dashboard-iot-silos-backend-1.onrender.com/api";
+// services/api.js - Endpoints centralizados
+// Atualizar em produção: inserir URL da API no Netlify/Render em VITE_API_URL
+const API_URL = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) ? import.meta.env.VITE_API_URL : "https://dashboard-iot-silos-backend-1.onrender.com/api"; // // Atualizar Render: inserir URL final da API aqui
 
 // Função para verificar se o token JWT está expirado
 const isTokenExpired = (token) => {
@@ -87,6 +88,7 @@ const api = {
   },
   
   getSilos: () => request("/silos"),
+  getUsers: () => request("/users"),
   
   getReadings: (siloId, limit = 100) => {
     const queryParams = new URLSearchParams();
@@ -96,6 +98,11 @@ const api = {
   },
   
   getAlerts: () => request("/alerts"),
+
+  // Weather helpers
+  getWeatherForLocation: (lat, lon) => request(`/weather/for-location?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`),
+  getWeatherLatest: (lat, lon) => request(`/weather/latest?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`),
+  fetchWeatherWeekly: (lat, lon, siloId) => request(`/weather/fetch-weekly`, { method: 'POST', body: JSON.stringify({ lat, lon, silo_id: siloId }) }),
   
   sendSubscription: (sub) => 
     request("/notifications/subscribe", { 
@@ -111,6 +118,9 @@ const api = {
   
   adminListSubscriptions: () => request("/notifications/admin/subscriptions")
 };
+
+// Generic GET helper
+api.get = (path) => request(path);
 
 // Método auxiliar PUT
 api.put = (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) });

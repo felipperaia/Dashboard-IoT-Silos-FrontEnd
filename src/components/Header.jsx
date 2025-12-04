@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, Bell, User, Home, MessageSquare, Menu, X } from "lucide-react";
+import { Settings, User as UserIcon, Home, MessageSquare, Menu, X } from "lucide-react";
 import axios from "axios";
 import styled from "styled-components";
 
@@ -23,6 +23,18 @@ export const Header = ({ pushEnabled }) => {
 
   const [menuOpen, setMenuOpen] = useState(false); // 👈 CONTROLA O MENU HAMBÚRGUER
 
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('current_user');
+      localStorage.removeItem('demeter_chat_history');
+      // trigger storage event for other tabs
+      localStorage.setItem('logout', Date.now().toString());
+    } catch (e) {}
+    window.location.href = '/login';
+  };
+
   useEffect(() => {
     const loadFromStorage = () => {
       try {
@@ -42,7 +54,13 @@ export const Header = ({ pushEnabled }) => {
 
   return (
     <HeaderWrapper>
-      <Title>Deméter - Monitoring Dashboard</Title>
+      <div style={{display:'flex', flexDirection:'column'}}>
+        <Title>Deméter - Monitoring Dashboard</Title>
+        <UserLine>
+          <UserIcon size={14} />
+          <UserSubTitle>{userName}</UserSubTitle>
+        </UserLine>
+      </div>
 
       {/* BOTÃO HAMBÚRGUER (MOBILE) */}
       <HamburgerButton onClick={() => setMenuOpen(!menuOpen)}>
@@ -65,19 +83,9 @@ export const Header = ({ pushEnabled }) => {
           <Settings size={18} />
           <span>Configurações</span>
         </Button>
-
-        <Button onClick={() => navigate("/notifications")} $relative>
-          <Bell size={18} />
-          <span>Notificações</span>
-          {pushEnabled && <NotificationDot />}
-        </Button>
-
-        <Button onClick={() => navigate("/profile")} $withGap>
-          <User size={18} />
-          <UserInfo>
-            <UserName>{userName}</UserName>
-            <UserRole>{userRole}</UserRole>
-          </UserInfo>
+        <Button onClick={() => handleLogout()} $withGap>
+          <UserIcon size={18} />
+          <span>Logout</span>
         </Button>
       </NavContainer>
 
@@ -99,14 +107,9 @@ export const Header = ({ pushEnabled }) => {
             Configurações
           </MobileButton>
 
-          <MobileButton onClick={() => navigate("/notifications")}>
-            <Bell size={20} />
-            Notificações
-          </MobileButton>
-
-          <MobileButton onClick={() => navigate("/profile")}>
-            <User size={20} />
-            Perfil
+          <MobileButton onClick={() => { handleLogout(); }}> 
+            <UserIcon size={20} />
+            Logout
           </MobileButton>
         </MobileMenu>
       )}
@@ -240,5 +243,25 @@ const UserName = styled.span`
 
 const UserRole = styled.span`
   font-size: 12px;
+  color: #e5e7eb;
+`;
+
+const Underline = styled.div`
+  width: 40px;
+  height: 2px;
+  background: #fff;
+  margin-top: 6px;
+  border-radius: 2px;
+`;
+
+const UserLine = styled.div`
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin-top:4px;
+`;
+
+const UserSubTitle = styled.span`
+  font-size:12px;
   color: #e5e7eb;
 `;

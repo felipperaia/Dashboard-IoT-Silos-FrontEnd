@@ -2,15 +2,26 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import api from "../services/api";
+import Notifications from './Notifications';
 
 export default function Settings() {
   const [profile, setProfile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'operator' });
+  const [activeTab, setActiveTab] = useState('perfil');
   const navigate = useNavigate();
 
   useEffect(() => {
     const raw = localStorage.getItem("current_user");
     if (raw) setProfile(JSON.parse(raw));
+    // if admin, fetch users
+    try {
+      const cu = JSON.parse(localStorage.getItem('current_user') || '{}');
+      if (cu.role === 'admin') {
+        api.get('/users').then(data => setUsers(data)).catch(() => {});
+      }
+    } catch(e){}
   }, []);
 
   const handleChange = (e) => {
@@ -37,65 +48,196 @@ export default function Settings() {
     }
   };
 
+  const createUser = async () => {
+    try {
+      await api.post('/users', newUser);
+      alert('Usuário criado');
+      setNewUser({ username: '', email: '', password: '', role: 'operator' });
+      const data = await api.get('/users'); setUsers(data);
+    } catch(e) { console.error(e); alert('Erro ao criar usuário'); }
+  }
+
   if (!profile) return <Panel>Carregando...</Panel>;
 
   return (
-    <Panel>
-      <Title>Configurações do Usuário</Title>
+    <SettingsContainer>
+      <HeaderRow>
+        <Tabs>
+          <TabButton $active={activeTab === 'perfil'} onClick={() => setActiveTab('perfil')}>Perfil</TabButton>
+          {profile.role === 'admin' && <TabButton $active={activeTab === 'usuarios'} onClick={() => setActiveTab('usuarios')}>Usuários</TabButton>}
+          <TabButton $active={activeTab === 'notificacoes'} onClick={() => setActiveTab('notificacoes')}>Notificações</TabButton>
+        </Tabs>
+      </HeaderRow>
 
-      <Form>
-        <Label>
-          Nome
-          <Input
-            name="name"
-            value={profile.name || profile.username || ""}
-            onChange={handleChange}
-          />
-        </Label>
+      {activeTab === 'perfil' && (
+        <CardGrande>
+          <CardHeader>
+            <h3 style={{margin:0, color:'#1e293b'}}>Configurações do Usuário</h3>
+            <div>
+              <PrimaryButton onClick={save} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</PrimaryButton>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <Section>
+              <Label>Nome
+                <Input name="name" value={profile.name || profile.username || ""} onChange={handleChange} />
+              </Label>
+            </Section>
 
-        <Label>
-          Email
-          <Input
-            name="email"
-            value={profile.email || ""}
-            onChange={handleChange}
-          />
-        </Label>
+            <Section>
+              <Label>Email
+                <Input name="email" value={profile.email || ""} onChange={handleChange} />
+              </Label>
+            </Section>
 
-        <Label>
-          Telefone
-          <Input
-            name="phone"
-            value={profile.phone || ""}
-            onChange={handleChange}
-          />
-        </Label>
+            <Section>
+              <Label>Telefone
+                <Input name="phone" value={profile.phone || ""} onChange={handleChange} />
+              </Label>
+            </Section>
 
-        <ButtonsRow>
-          <PrimaryButton onClick={save} disabled={saving}>
-            {saving ? "Salvando..." : "Salvar"}
-          </PrimaryButton>
+            <SectionRow>
+              <SecondaryButton onClick={() => navigate('/mfa')}>Configurar MFA</SecondaryButton>
+            </SectionRow>
+          </CardBody>
+        </CardGrande>
+      )}
 
-          <SecondaryButton onClick={() => navigate("/mfa")}>
-            Configurar MFA
-          </SecondaryButton>
-        </ButtonsRow>
-      </Form>
-    </Panel>
+      {activeTab === 'usuarios' && profile.role === 'admin' && (
+        <CardGrande>
+          <CardHeader>
+            <h3 style={{margin:0, color:'#1e293b'}}>Gerenciar Usuários</h3>
+          </CardHeader>
+          <CardBody>
+            <Section>
+              <Label>Nome de usuário
+                <Input value={newUser.username} onChange={(e)=>setNewUser({...newUser, username:e.target.value})} />
+              </Label>
+            </Section>
+
+            <Section>
+              <Label>Email
+                <Input value={newUser.email} onChange={(e)=>setNewUser({...newUser, email:e.target.value})} />
+              </Label>
+            </Section>
+
+            <Section>
+              <Label>Senha
+                <Input type="password" value={newUser.password} onChange={(e)=>setNewUser({...newUser, password:e.target.value})} />
+              </Label>
+            </Section>
+
+            <Section>
+              <Label>Função
+                <Select value={newUser.role} onChange={(e)=>setNewUser({...newUser, role:e.target.value})}>
+                  <option value="operator">Operator</option>
+                  <option value="admin">Admin</option>
+                </Select>
+              </Label>
+            </Section>
+
+            <ButtonsRow>
+              <PrimaryButton onClick={createUser}>Criar Usuário</PrimaryButton>
+            </ButtonsRow>
+
+            <Section style={{marginTop:12}}>
+              <h4 style={{color:'#1e293b'}}>Usuários existentes</h4>
+              <div>
+                {users.map(u => (
+                  <UserRow key={u.id}>
+                    <div>
+                      <div style={{fontWeight:600, color:'#111827'}}>{u.username}</div>
+                      <div style={{fontSize:12,color:'#4b5563'}}>{u.email} — {u.role}</div>
+                    </div>
+                  </UserRow>
+                ))}
+              </div>
+            </Section>
+          </CardBody>
+        </CardGrande>
+      )}
+
+      {activeTab === 'notificacoes' && (
+        <CardGrande>
+          <CardHeader>
+            <h3 style={{margin:0, color:'#1e293b'}}>Notificações</h3>
+          </CardHeader>
+          <CardBody>
+            <Section>
+              <Notifications />
+            </Section>
+          </CardBody>
+        </CardGrande>
+      )}
+    </SettingsContainer>
   );
 }
 
 /* ----------------------------- STYLED COMPONENTS ----------------------------- */
 
 const Panel = styled.div`
-  background: rgb(255, 255, 255);
-  border: 1px solid rgba(129, 110, 255, 0.25);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 10px;
+  padding: 16px;
+  max-width: 720px;
+  margin: 14px auto;
+  color: #06202a;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px rgba(2,6,23,0.12);
+  }
+`;
+
+const SettingsContainer = styled.div`
   padding: 24px;
-  max-width: 650px;
-  margin: 20px auto;
-  color: #000000;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-width: 1100px;
+  margin: 12px auto;
+`;
+
+const Grid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+`;
+
+const Card = styled.div`
+  background: rgba(255,255,255,0.94);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+  border: 1px solid #e6eef6;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+  &:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 14px 32px rgba(2,6,23,0.10);
+  }
+`;
+
+const CardHeader = styled.div`
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;
+`;
+
+const CardBody = styled.div`
+  display:flex; flex-direction:column; gap:10px;
+`;
+
+const Section = styled.div`
+  padding:10px; border-radius:10px;
+  transition: transform 0.12s ease, background 0.12s ease;
+  &:hover { transform: translateY(-4px); background: #fbfdff; }
+`;
+
+const SectionRow = styled.div`
+  display:flex; gap:8px; align-items:center;
+`;
+
+const UserRow = styled.div`
+  padding:8px; border-radius:8px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; gap:12px;
 `;
 
 const Title = styled.h2`
@@ -112,24 +254,24 @@ const Form = styled.div`
 
 const Label = styled.label`
   font-size: 14px;
-  opacity: 0.9;
+  color: #0f172a;
   display: flex;
   flex-direction: column;
   gap: 6px;
 `;
 
 const Input = styled.input`
-  padding: 10px;
-  background: #e2e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  color: #858282;
+  padding: 12px;
+  background: #f1f5f9;
+  border: 1px solid rgba(148,163,184,0.4);
+  border-radius: 10px;
+  color: #111827;
   font-size: 15px;
 
   &:focus {
     outline: none;
-    border-color: #a78bfa;
-    background: rgba(255, 255, 255, 0.12);
+    border-color: #4f46e5;
+    background: rgba(255, 255, 255, 0.98);
   }
 `;
 
@@ -139,23 +281,54 @@ const ButtonsRow = styled.div`
   margin-top: 10px;
 `;
 
+const HeaderRow = styled.div`
+  display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px;
+`;
+
+const Tabs = styled.div`
+  display:flex; gap:8px; border-bottom:2px solid #e2e8f0; padding-bottom:2px; justify-content:flex-end;
+`;
+
+const TabButton = styled.button`
+  padding:10px 16px; border:none; border-radius:8px 8px 0 0; cursor:pointer; font-size:14px; font-weight:500;
+  transition: all 0.16s ease;
+  background: ${({$active}) => $active ? 'linear-gradient(135deg,#258f3f,#269c4a)' : 'transparent'};
+  color: ${({$active}) => $active ? '#fff' : '#fff'};
+  box-shadow: ${({$active}) => $active ? '0 2px 8px rgba(59,130,246,0.18)' : 'none'};
+  &:hover { transform: translateY(-2px); color: #0f172a; background: ${({$active}) => $active ? 'linear-gradient(135deg,#1e7b36,#1f8b3f)' : '#f9fafb'} }
+`;
+
+const CardGrande = styled.div`
+  background: rgba(255,255,255,0.96);
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 8px rgba(2,6,23,0.06);
+  border: 1px solid #e6eef6;
+`;
+
+const Select = styled.select`
+  padding: 10px; background: #f1f5f9; border-radius: 8px; border: 1px solid rgba(148,163,184,0.4); color: #111827;
+`;
+
 const PrimaryButton = styled.button`
   flex: 1;
   padding: 10px;
-  background: #16a34a;
+  background: #16a34a; /* green primary */
   border: none;
   border-radius: 8px;
   color: white;
   font-size: 15px;
   cursor: pointer;
-  transition: 0.25s;
+  transition: transform 0.12s ease, background 0.12s ease;
 
   &:hover {
-    background: #9f67ff;
+    transform: translateY(-2px);
+    background: #15803d;
   }
 
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.6;
     cursor: not-allowed;
   }
 `;
@@ -163,15 +336,16 @@ const PrimaryButton = styled.button`
 const SecondaryButton = styled.button`
   flex: 1;
   padding: 10px;
-  background: #4f46e5;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #2563eb; /* blue for MFA */
+  border: 1px solid rgba(0,0,0,0.06);
   border-radius: 8px;
   color: white;
   font-size: 15px;
   cursor: pointer;
-  transition: 0.25s;
+  transition: transform 0.12s ease, background 0.12s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.22);
+    transform: translateY(-2px);
+    background: #1e40af;
   }
 `;

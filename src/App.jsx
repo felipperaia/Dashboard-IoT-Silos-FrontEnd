@@ -5,16 +5,17 @@ import imgSilos from "./assets/silos-2.jpg";
 import "./app.css";
 import { Header } from "./components/Header";
 import Login from "./pages/Login";
+import AboutDemeter from "./pages/AboutDemeter";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import Notifications from "./pages/Notifications";
 import MFA from "./pages/MFA";
-import Profile from "./pages/Profile";
 import Chat from "./pages/Chat";
+
 
 function AppContent({ pushEnabled, unsubscribeAndLogout }) {
   const location = useLocation();
-  const noHeaderRoutes = ["/login"];
+  const noHeaderRoutes = ["/login", "/sobre-demeter"];
   const shouldShowHeader = !noHeaderRoutes.includes(location.pathname);
 
   return (
@@ -26,13 +27,13 @@ function AppContent({ pushEnabled, unsubscribeAndLogout }) {
         />
       )}
       <Routes>
-         <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/sobre-demeter" element={<AboutDemeter />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/mfa" element={<MFA />} />
-        <Route path="/profile" element={<Profile />} />
           <Route path="/chat" element={<Chat />} />
       </Routes>
     </>

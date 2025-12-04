@@ -1,37 +1,244 @@
 import React, { useEffect, useState } from "react";
-import { Line } from "react-chartjs-2";
+import api from "../services/api.js";
+import { Line as LineChart, Bar as BarChart } from "react-chartjs-2";
+import tempIcon from "../assets/icons/thermometer.png";
+import humidityIcon from "../assets/icons/humidity.png";
+import co2Icon from "../assets/icons/co2.png";
+import gasIcon from "../assets/icons/gas.png";
+import lightIcon from "../assets/icons/light.png";
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend
-} from "chart.js";
+);
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+import styled from "styled-components";
+
+const Container = styled.div`
+  display: flex;
+  min-height: 100vh;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
+`;
+
+const MainContent = styled.div` 
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+    width: 70vw;
+    
+     @media (max-width: 768px) {
+    flex: 1;
+    margin: auto;
+    overflow-y: auto;
+    width: 80vw;
+    
+  }
+`
+
+const Tabs = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 25px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 2px;
+  justify-content: end;
+
+  @media (max-width: 768px) {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 25px;
+    border-bottom: 2px solid rgb(226, 232, 240);
+    padding-bottom: 2px;
+    justify-content: center;
+
+    button {
+      padding: 8px 12px!important;
+    }
+  }
+`;
 
 export default function Dashboard() {
   const [silos, setSilos] = useState([]);
   const [readings, setReadings] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [users, setUsers] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [reportStart, setReportStart] = useState("");
+  const [reportEnd, setReportEnd] = useState("");
+  const [reportTitle, setReportTitle] = useState("");
+  const [reportNotes, setReportNotes] = useState("");
+  const [meteorology, setMeteorology] = useState([]);
+  const [weatherData, setWeatherData] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState(null);
+  const [weatherLocation, setWeatherLocation] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('weather_location') || 'null'); } catch { return null; }
+  });
+  const [weatherQuery, setWeatherQuery] = useState('');
+  const [geoResults, setGeoResults] = useState([]);
+  const [usingDeviceLocation, setUsingDeviceLocation] = useState(false);
+  const [forecasts, setForecasts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedSilo, setSelectedSilo] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [newSilo, setNewSilo] = useState({ name: "", location: "", capacity: "" });
+  const [newSilo, setNewSilo] = useState({ name: "", device_id: "", latitude: "", longitude: "", capacity: "" });
   const [newUser, setNewUser] = useState({ username: "", email: "", password: "" });
-  const [newReading, setNewReading] = useState({ silo_id: "", temp_C: "", rh_pct: "" });
-const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_token"));
+  const [newReading, setNewReading] = useState({ silo_id: "", temp_C: "", rh_pct: "", co2_ppm_est: "", mq2_raw: "", luminosity_alert: 0, lux: "" });
+  const [selectedSiloAnalysis, setSelectedSiloAnalysis] = useState("");
+  const [analysisMetrics, setAnalysisMetrics] = useState(null);
+  const [analysisForecastByTarget, setAnalysisForecastByTarget] = useState({});
+  const [analysisExplanation, setAnalysisExplanation] = useState("");
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
+  const [analysisPeriodDays, setAnalysisPeriodDays] = useState(30);
+
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_token"));
 
   const API_BASE = "https://dashboard-iot-silos-backend-1.onrender.com";
   const getHeaders = () => ({
     "Authorization": `Bearer ${authToken}`,
     "Content-Type": "application/json"
   });
+
+  // centralized api helper
+  const apiClient = api;
+
+  const saveWeatherLocation = (loc) => {
+    try { localStorage.setItem('weather_location', JSON.stringify(loc)); setWeatherLocation(loc); } catch (e) { console.warn('Não foi possível salvar local', e); }
+  };
+
+  const loadWeatherForLocation = async (lat, lon, name) => {
+    setWeatherLoading(true); setWeatherError(null);
+    try {
+      let data;
+      if (apiClient && apiClient.getWeatherForLocation) {
+        data = await apiClient.getWeatherForLocation(lat, lon);
+      } else {
+        const url = `${API_BASE}/api/weather/for-location?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+        const res = await fetch(url, { headers: getHeaders() });
+        if (!res.ok) throw new Error('Erro ao buscar meteorologia');
+        data = await res.json();
+      }
+      setWeatherData(data);
+      if (name || (data && data.location && data.location.name)) saveWeatherLocation({ lat, lon, name: name || (data.location && data.location.name) });
+    } catch (e) {
+      console.warn('loadWeatherForLocation erro', e);
+      setWeatherError(e.message || 'Erro ao carregar previsão');
+      setWeatherData(null);
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (weatherLocation && weatherLocation.lat && weatherLocation.lon) {
+      loadWeatherForLocation(weatherLocation.lat, weatherLocation.lon, weatherLocation.name);
+    }
+  }, []);
+
+  const useDeviceLocation = () => {
+    if (!navigator.geolocation) { alert('Geolocalização não suportada pelo navegador'); return; }
+    setUsingDeviceLocation(true);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const lat = pos.coords.latitude; const lon = pos.coords.longitude;
+      await loadWeatherForLocation(lat, lon, 'Local Atual');
+      setUsingDeviceLocation(false);
+    }, (err) => { alert('Permissão negada ou erro: ' + err.message); setUsingDeviceLocation(false); });
+  };
+
+  const searchLocationByName = async (q) => {
+    setWeatherQuery(q);
+    if (!q || q.length < 2) { setGeoResults([]); return; }
+    try {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=pt`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Erro ao buscar locais');
+      const j = await res.json();
+      setGeoResults(j.results || []);
+    } catch (e) {
+      console.warn('geocoding erro', e);
+      setGeoResults([]);
+    }
+  };
+
+  const selectGeo = (r) => {
+    const lat = r.latitude; const lon = r.longitude; const name = r.name + (r.admin1 ? `, ${r.admin1}` : '');
+    saveWeatherLocation({ lat, lon, name });
+    setGeoResults([]);
+    setWeatherQuery('');
+    loadWeatherForLocation(lat, lon, name);
+  };
+
+  // Open report PDF via fetch so Authorization header is sent
+  const openReportPdf = async (id) => {
+    if (!id) return;
+    const url = `${API_BASE}/api/reports/${id}/pdf`;
+    const res = await fetch(url, { headers: getHeaders() });
+    if (!res.ok) {
+      let txt = null;
+      try { txt = await res.text(); } catch (e) { }
+      throw new Error(txt || 'Erro ao baixar PDF');
+    }
+    const blob = await res.blob();
+    const fileUrl = window.URL.createObjectURL(blob);
+    window.open(fileUrl, '_blank');
+  };
+
+  // Load forecasts and metrics for analysis card
+  const loadForecastsAndMetrics = async (siloId, periodDays = 30) => {
+    if (!siloId) return;
+    try {
+      setAnalysisLoading(true);
+      setAnalysisError(null);
+
+      const metricsRes = await fetch(`${API_BASE}/api/ml/analysis?siloId=${encodeURIComponent(siloId)}&period_days=${encodeURIComponent(periodDays)}`, { headers: getHeaders() });
+      if (!metricsRes.ok) throw new Error('Erro ao buscar métricas de análise');
+      const metricsData = await metricsRes.json();
+
+      const { metrics, forecasts, explanation } = metricsData;
+
+      const grouped = {};
+      if (Array.isArray(forecasts)) {
+        for (const f of forecasts) {
+          const key = f.target || 'desconhecido';
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(f);
+        }
+      }
+
+      setAnalysisMetrics(metrics || null);
+      setAnalysisForecastByTarget(grouped);
+      setAnalysisExplanation(explanation || 'Sem análise disponível para este período.');
+    } catch (e) {
+      setAnalysisError(e.message || 'Falha ao carregar análise');
+      setAnalysisMetrics(null);
+      setAnalysisForecastByTarget({});
+      setAnalysisExplanation('Sem análise disponível para este período.');
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
 
   const fetchSilos = async () => {
     try {
@@ -58,7 +265,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
       });
       if (!res.ok) throw new Error("Erro ao criar silo");
       alert("Silo criado!");
-      setNewSilo({ name: "", location: "", capacity: "" });
+      setNewSilo({ name: "", device_id: "", latitude: "", longitude: "", capacity: "" });
       fetchSilos();
     } catch (err) {
       alert("Erro: " + err.message);
@@ -97,18 +304,27 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
 
   const createReading = async () => {
     try {
+      // determine device_id from selected silo if not provided
+      const deviceIdFromSilo = selectedSilo ? (silos.find(s => s._id === selectedSilo)?.device_id) : undefined;
       const res = await fetch(`${API_BASE}/api/readings/`, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify({
           ...newReading,
+          silo_id: newReading.silo_id || selectedSilo,
+          device_id: newReading.device_id || deviceIdFromSilo || '',
+          timestamp: new Date().toISOString(),
           temp_C: parseFloat(newReading.temp_C),
-          rh_pct: parseFloat(newReading.rh_pct)
+          rh_pct: parseFloat(newReading.rh_pct),
+          co2_ppm_est: newReading.co2_ppm_est ? parseFloat(newReading.co2_ppm_est) : undefined,
+          mq2_raw: newReading.mq2_raw ? parseInt(newReading.mq2_raw) : undefined,
+          luminosity_alert: typeof newReading.luminosity_alert !== 'undefined' ? newReading.luminosity_alert : undefined,
+          lux: newReading.lux ? parseFloat(newReading.lux) : undefined
         })
       });
       if (!res.ok) throw new Error("Erro ao criar leitura");
       alert("Leitura criada!");
-      setNewReading({ silo_id: "", temp_C: "", rh_pct: "" });
+      setNewReading({ silo_id: "", temp_C: "", rh_pct: "", co2_ppm_est: "", mq2_raw: "", luminosity_alert: 0, lux: "" });
       fetchReadings(selectedSilo);
     } catch (err) {
       alert("Erro: " + err.message);
@@ -123,6 +339,29 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
       setAlerts(data || []);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchReports = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/reports?limit=50`, { headers: getHeaders() });
+      if (!res.ok) throw new Error('Erro ao buscar relatórios');
+      const data = await res.json();
+      setReports(data || []);
+    } catch (e) {
+      console.warn('fetchReports erro', e);
+    }
+  };
+
+  const fetchForecastsForSilo = async (siloId) => {
+    try {
+      if (!siloId) return;
+      const res = await fetch(`${API_BASE}/api/ml/forecast?siloId=${siloId}&period_days=7`, { headers: getHeaders() });
+      if (!res.ok) throw new Error('Erro ao buscar previsões');
+      const data = await res.json();
+      setForecasts(data || []);
+    } catch (e) {
+      console.warn('fetchForecastsForSilo erro', e);
     }
   };
 
@@ -181,7 +420,45 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
     fetchSilos();
     fetchAlerts();
     fetchUsers();
+    fetchReports();
+
+    // poll reports and meteorology periodically
+    const repInterval = setInterval(() => fetchReports(), 60 * 1000);
+    return () => clearInterval(repInterval);
   }, []);
+
+  // Auto-load meteorology when entering the Report tab or when silo changes
+  useEffect(() => {
+    // Always auto-load meteorology when in Report tab; if selectedSilo use silo-specific, otherwise load recent docs
+    let mounted = true;
+    const doLoad = async () => {
+      try {
+        const url = selectedSilo ? `${API_BASE}/api/weather/latest?silo_id=${selectedSilo}` : `${API_BASE}/api/weather/latest?limit=10`;
+        const res = await fetch(url, { headers: getHeaders() });
+        if (res.ok && mounted) {
+          const data = await res.json();
+          setMeteorology(data || []);
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar meteorologia automaticamente', e);
+      }
+    };
+
+    if (activeTab === 'report') {
+      doLoad();
+      // poll meteorology every 2 minutes while on report tab
+      const iv = setInterval(doLoad, 2 * 60 * 1000);
+      // also refresh forecasts
+      fetchForecastsForSilo(selectedSilo);
+      return () => { mounted = false; clearInterval(iv); };
+    }
+  }, [activeTab, selectedSilo]);
+
+  // usuário atual (para regras de exibição por role)
+  const currentUser = (() => {
+    try { return JSON.parse(localStorage.getItem('current_user') || '{}'); } catch { return {}; }
+  })();
+  const isAdmin = currentUser && currentUser.role === 'admin';
 
   useEffect(() => {
     if (selectedSilo) fetchReadings(selectedSilo);
@@ -197,23 +474,23 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
   // Calculate averages and trends
   const calculateMetrics = () => {
     if (!readings.length) return { avgTemp: 0, avgHumidity: 0, tempTrend: "stable", humTrend: "stable" };
-    
+
     const recent = readings.slice(-10);
     const older = readings.slice(-20, -10);
-    
+
     const avgTemp = recent.reduce((sum, r) => sum + (r.temp_C / 10), 0) / recent.length;
-    
-    const avgHumidity = recent.reduce((sum, r) => sum + (r.rh_pct / 10 ), 0) / recent.length;
-    
+
+    const avgHumidity = recent.reduce((sum, r) => sum + (r.rh_pct / 10), 0) / recent.length;
+
     const oldAvgTemp = older.length ? older.reduce((sum, r) => sum + r.temp_C, 0) / older.length : avgTemp;
     const oldAvgHum = older.length ? older.reduce((sum, r) => sum + r.rh_pct, 0) / older.length : avgHumidity;
-    
+
     const tempTrend = avgTemp > oldAvgTemp ? "up" : avgTemp < oldAvgTemp ? "down" : "stable";
     const humTrend = avgHumidity > oldAvgHum ? "up" : avgHumidity < oldAvgHum ? "down" : "stable";
-    
+
     return { avgTemp: avgTemp.toFixed(1), avgHumidity: avgHumidity.toFixed(1), tempTrend, humTrend };
   };
-  
+
 
   const metrics = calculateMetrics();
 
@@ -232,9 +509,9 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
   const chartOptions = {
     responsive: true,
     interaction: { mode: "index", intersect: false },
-    plugins: { 
-      legend: { position: "top", labels: { font: { size: 12 }, padding: 15 } }, 
-      title: { display: true, text: "Monitoramento em Tempo Real", font: { size: 16 } } 
+    plugins: {
+      legend: { position: "top", labels: { font: { size: 12 }, padding: 15 } },
+      title: { display: true, text: "Monitoramento em Tempo Real", font: { size: 16 } }
     },
     scales: {
       x: { grid: { display: false }, ticks: { font: { size: 11 } } },
@@ -269,7 +546,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
             <span style={s.metricUnit}>°C</span>
           </div>
           <div style={s.metricBar}>
-            <div style={{...s.metricBarFill, width: `${Math.min(100, (metrics.avgTemp/40)*100)}%`, background: "linear-gradient(90deg, #ef4444, #f97316)"}}></div>
+            <div style={{ ...s.metricBarFill, width: `${Math.min(100, (metrics.avgTemp / 40) * 100)}%`, background: "linear-gradient(90deg, #ef4444, #f97316)" }}></div>
           </div>
         </div>
 
@@ -283,7 +560,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
             <span style={s.metricUnit}>%</span>
           </div>
           <div style={s.metricBar}>
-            <div style={{...s.metricBarFill, width: `${metrics.avgHumidity}%`, background: "linear-gradient(90deg, #3b82f6, #06b6d4)"}}></div>
+            <div style={{ ...s.metricBarFill, width: `${metrics.avgHumidity}%`, background: "linear-gradient(90deg, #3b82f6, #06b6d4)" }}></div>
           </div>
         </div>
 
@@ -294,13 +571,13 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
           <div style={s.trendsContainer}>
             <div style={s.trendItem}>
               <span style={s.trendLabel}>Temp:</span>
-              <span style={{...s.trendValue, color: metrics.tempTrend === "up" ? "#ef4444" : "#10b981"}}>
+              <span style={{ ...s.trendValue, color: metrics.tempTrend === "up" ? "#ef4444" : "#10b981" }}>
                 {metrics.tempTrend === "up" ? "Subindo" : metrics.tempTrend === "down" ? "Caindo" : "Estável"}
               </span>
             </div>
             <div style={s.trendItem}>
               <span style={s.trendLabel}>Umid:</span>
-              <span style={{...s.trendValue, color: metrics.humTrend === "up" ? "#3b82f6" : "#10b981"}}>
+              <span style={{ ...s.trendValue, color: metrics.humTrend === "up" ? "#3b82f6" : "#10b981" }}>
                 {metrics.humTrend === "up" ? "Subindo" : metrics.humTrend === "down" ? "Caindo" : "Estável"}
               </span>
             </div>
@@ -308,7 +585,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
         </div>
 
         {/* Notifications */}
-        <div style={{...s.metricCard, background: unreadAlerts.length > 0 ? "linear-gradient(135deg, #fef3c7, #fed7aa)" : "#fff"}}>
+        <div style={{ ...s.metricCard, background: unreadAlerts.length > 0 ? "linear-gradient(135deg, #fef3c7, #fed7aa)" : "#fff" }}>
           <div style={s.metricHeader}>
             <span style={s.metricLabelNot}>Notificações</span>
             {unreadAlerts.length > 0 && <span style={s.badge}>{unreadAlerts.length}</span>}
@@ -330,7 +607,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
         <div style={s.infoCard}>
           <div style={s.infoIcon}></div>
           <p style={s.infoText}>
-            Monitorar temperatura e umidade dos silos é crítico para prevenir fermentação, perda de qualidade e risco de autoaquecimento. 
+            Monitorar temperatura e umidade dos silos é crítico para prevenir fermentação, perda de qualidade e risco de autoaquecimento.
             Ajuste ventilação e períodos de rechecagem sempre que os valores estiverem fora da faixa operacional recomendada.
           </p>
         </div>
@@ -342,11 +619,18 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
           <div style={s.headerActions}>
           </div>
         </div>
-        
+
         <Tabs>
-          {["dashboard", "silos", "readings", "alerts", "users"].map(tab => (
-            <button key={tab} style={activeTab === tab ? s.tabActive : s.tab} onClick={() => setActiveTab(tab)}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          {[
+            { k: 'dashboard', label: 'Dashboard' },
+            { k: 'simplified', label: 'Dashboard Simplificado' },
+            { k: 'silos', label: 'Silos' },
+            { k: 'readings', label: 'Leituras' },
+            { k: 'alerts', label: 'Alertas' },
+            { k: 'report', label: 'Relatório' }
+          ].map(tab => (
+            <button key={tab.k} style={activeTab === tab.k ? s.tabActive : s.tab} onClick={() => setActiveTab(tab.k)}>
+              {tab.label}
             </button>
           ))}
         </Tabs>
@@ -364,23 +648,23 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
                     {silos.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                   </select>
                 </div>
-                
+
                 {selectedSilo && readingsBySilo[selectedSilo] && readingsBySilo[selectedSilo].length > 0 && (
                   <div style={s.card}>
-                    <Line data={prepareChartData()} options={chartOptions} />
+                    <LineChart data={prepareChartData()} options={chartOptions} />
                   </div>
                 )}
-                
+
                 <div style={s.statsGrid}>
                   <div style={s.statCard}>
                     <div style={s.statIcon}></div>
                     <h3 style={s.statTitle}>Total de Silos</h3>
                     <p style={s.statNumber}>{silos.length}</p>
                   </div>
-                  <div style={{...s.statCard, background: unreadAlerts.length > 0 ? "linear-gradient(135deg, #fef3c7, #fed7aa)" : "linear-gradient(135deg, #f3f4f6, #ffffff)"}}>
+                  <div style={{ ...s.statCard, background: unreadAlerts.length > 0 ? "linear-gradient(135deg, #fef3c7, #fed7aa)" : "linear-gradient(135deg, #f3f4f6, #ffffff)" }}>
                     <div style={s.statIcon}></div>
                     <h3 style={s.statTitle}>Alertas Ativos</h3>
-                    <p style={{...s.statNumber, color: unreadAlerts.length > 0 ? "#f59e0b" : "#10b981"}}>{unreadAlerts.length}</p>
+                    <p style={{ ...s.statNumber, color: unreadAlerts.length > 0 ? "#f59e0b" : "#10b981" }}>{unreadAlerts.length}</p>
                   </div>
                   <div style={s.statCard}>
                     <div style={s.statIcon}></div>
@@ -393,6 +677,994 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
           </div>
         )}
 
+        {activeTab === "simplified" && (
+          <div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px,1fr))",
+                gap: 20,
+              }}
+            >
+              {[
+                {
+                  key: "temp",
+                  title: "Temperatura",
+                  icon: tempIcon, // import
+                  value: readings.length
+                    ? readings[readings.length - 1].temp_C ?? 0
+                    : 0,
+                  unit: "°C",
+                  gradient: "linear-gradient(90deg, #ef4444, #f97316)",
+                },
+                {
+                  key: "hum",
+                  title: "Umidade",
+                  icon: humidityIcon, // import
+                  value: readings.length
+                    ? readings[readings.length - 1].rh_pct ?? 0
+                    : 0,
+                  unit: "%",
+                  gradient: "linear-gradient(90deg, #3b82f6, #06b6d4)",
+                },
+                {
+                  key: "co2",
+                  title: "CO²",
+                  icon: co2Icon, // import
+                  value: readings.length
+                    ? readings[readings.length - 1].co2_ppm_est ?? 0
+                    : 0,
+                  unit: "ppm",
+                  gradient: "linear-gradient(90deg, #64748b, #94a3b8)",
+                },
+                {
+                  key: "gas",
+                  title: "Gases inflamáveis",
+                  icon: gasIcon, // import
+                  value: readings.length
+                    ? readings[readings.length - 1].mq2_raw ?? 0
+                    : 0,
+                  unit: "",
+                  gradient: "linear-gradient(90deg, #f97316, #ef4444)",
+                },
+                {
+                  key: "light",
+                  title: "Luminosidade",
+                  icon: lightIcon, // import
+                  value: readings.length
+                    ? readings[readings.length - 1].lux ?? 0
+                    : 0,
+                  unit: "lux",
+                  gradient: "linear-gradient(90deg, #facc15, #f97316)",
+                },
+              ].map((metric) => (
+                <div
+                  key={metric.key}
+                  style={{
+                    ...s.card,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    background: "#000",
+                    color: "#fff",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <img
+                      src={metric.icon}
+                      alt={metric.title}
+                      style={{ width: 28, height: 28, filter: "invert(1)" }}
+                    />
+                    <h4 style={{ margin: 0, color: "#fff" }}>{metric.title}</h4>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 8,
+                    }}
+                  >
+                    <span
+                      style={{ fontSize: 28, fontWeight: 700, color: "#fff" }}
+                    >
+                      {metric.value}
+                    </span>
+                    <span style={{ color: "#cbd5e1" }}>{metric.unit}</span>
+                  </div>
+                  <div
+                    style={{
+                      width: "100%",
+                      height: 8,
+                      marginTop: 12,
+                      background: "#f1f5f9",
+                      borderRadius: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(
+                          100,
+                          metric.unit === "°C"
+                            ? Math.abs(metric.value)
+                            : metric.unit === "%"
+                              ? metric.value
+                              : metric.unit === "lux"
+                                ? Math.min(100, metric.value)
+                                : 50
+                        )}%`,
+                        background: metric.gradient,
+                        borderRadius: 6,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'report' && (
+          <div>
+            {/* WeatherCard: localização, busca e resumo 7 dias */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <h3 style={s.cardTitle}>Clima / Localização</h3>
+                <div style={s.weatherControls}>
+                  <input
+                    style={s.searchInput}
+                    placeholder="Buscar cidade ou endereço"
+                    value={weatherQuery}
+                    onChange={(e) => { setWeatherQuery(e.target.value); searchLocationByName(e.target.value); }}
+                  />
+                  <button style={s.buttonSmall} onClick={() => useDeviceLocation()}>{usingDeviceLocation ? 'Detectando...' : 'Usar GPS'}</button>
+                </div>
+              </div>
+              <div>
+                {weatherLoading ? <div>Carregando previsão...</div> : weatherError ? <div style={{ color: '#ef4444' }}>Erro: {weatherError}</div> : weatherData ? (
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                    <div style={s.weatherLeft}>
+                      <div style={s.weatherBigTemp}>
+                        {(weatherData.summary && typeof weatherData.summary.current_temp !== 'undefined') ? `${Math.round(weatherData.summary.current_temp)}°C` : (weatherData.data && weatherData.data.current_weather && weatherData.data.current_weather.temperature ? `${Math.round(weatherData.data.current_weather.temperature)}°C` : '—')}
+                      </div>
+                      <div style={{ color: '#64748b' }}>{weatherLocation && weatherLocation.name ? weatherLocation.name : (weatherData.location ? weatherData.location.name : '')}</div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      {(() => {
+                        const m = weatherData;
+                        const daily = (m && m.data && m.data.daily) ? m.data.daily : null;
+                        if (!daily) return <div>Nenhuma previsão disponível.</div>;
+                        const times = daily.time || [];
+                        const tmax = daily.temperature_2m_max || [];
+                        const tmin = daily.temperature_2m_min || [];
+                        const precip = daily.precipitation_sum || [];
+                        return (
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {times.slice(0, 7).map((t, i) => (
+                              <div key={i} style={{ padding: 8, background: '#fff', borderRadius: 8, border: '1px solid #e6eef6', textAlign: 'center', minWidth: 80 }}>
+                                <div style={{ fontSize: 12, color: '#64748b' }}>{new Date(t).toLocaleDateString()}</div>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: '#ef4444' }}>{tmax[i] ?? '—'}°</div>
+                                <div style={{ fontSize: 12, color: '#64748b' }}>min {tmin[i] ?? '—'}°</div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>{precip[i] ? `${precip[i]} mm` : '—'}</div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                ) : (<div>Selecione ou busque um local para ver a previsão.</div>)}
+                {geoResults && geoResults.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    {geoResults.map((r, idx) => (
+                      <div key={idx} style={{ padding: 8, cursor: 'pointer', color: '#111827', }} onClick={() => selectGeo(r)}>{r.name}{r.admin1 ? `, ${r.admin1}` : ''} — {r.country}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <h3 style={s.cardTitle}>Relatórios Gerados</h3>
+              </div>
+              <div>
+                {reports.length === 0 ? <p>Nenhum relatório carregado.</p> : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {reports.map(r => (
+                      <div key={r._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderRadius: 8, background: '#fff' }}>
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{r.title}</div>
+                          <div style={{ fontSize: 12, color: '#64748b' }}>Silo: {r.silo_name} | Período: {new Date(r.start).toLocaleDateString()} - {new Date(r.end).toLocaleDateString()}</div>
+                          {r.spark_metrics && Object.keys(r.spark_metrics).length > 0 && (
+                            <div style={{ marginTop: 6, fontSize: 12 }}>
+                              {Object.entries(r.spark_metrics).map(([t, g]) => (
+                                <div key={t} style={{ color: '#374151' }}>{t}: cnt {g.count} • avg {g.avg ? Number(g.avg).toFixed(2) : 'n/a'}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button style={s.buttonSmall} onClick={() => openReportPdf(r._id)}>Baixar PDF</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <h3 style={s.cardTitle}>Gerar Novo Relatório</h3>
+                <div>
+                  <select style={s.select} value={selectedSilo || ""} onChange={(e) => setSelectedSilo(e.target.value)}>
+                    <option value="">Selecione o Silo</option>
+                    {silos.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={s.form}>
+                <input type="date" style={s.input} value={reportStart} onChange={(e) => setReportStart(e.target.value)} />
+                <input type="date" style={s.input} value={reportEnd} onChange={(e) => setReportEnd(e.target.value)} />
+                <input style={s.input} placeholder="Título (opcional)" value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} />
+                <textarea style={{ ...s.input, minHeight: 80 }} placeholder="Notas" value={reportNotes} onChange={(e) => setReportNotes(e.target.value)} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button style={s.button} onClick={async () => {
+                    if (!selectedSilo) { alert('Selecione um silo'); return; }
+                    try {
+                      const body = { silo_id: selectedSilo, start: new Date(reportStart).toISOString(), end: new Date(reportEnd).toISOString(), title: reportTitle, notes: reportNotes };
+                      const res = await fetch(`${API_BASE}/api/reports/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(body) });
+                      if (!res.ok) throw new Error('Erro ao gerar relatório');
+                      const created = await res.json();
+                      // abrir PDF via fetch com headers
+                      try {
+                        await openReportPdf(created._id);
+                      } catch (err) {
+                        alert('Erro ao gerar/abrir PDF: ' + (err.message || err));
+                      }
+                    } catch (e) { alert('Erro ao gerar relatório: ' + e.message) }
+                  }}>Gerar Relatório (PDF)</button>
+                  <div style={{ flex: 1 }} />
+                </div>
+              </div>
+              {meteorology.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <h4>Previsão Meteorológica (7 dias)</h4>
+                  {(() => {
+                    const m = meteorology[0];
+                    const daily = (m && m.data && m.data.daily) ? m.data.daily : null;
+                    if (!daily) return <div>Nenhuma previsão disponível.</div>;
+                    const times = daily.time || [];
+                    const tmax = daily.temperature_2m_max || [];
+                    const tmin = daily.temperature_2m_min || [];
+                    const precip = daily.precipitation_sum || [];
+
+                    const allTemps = [...tmax, ...tmin].filter(v => typeof v === 'number');
+                    const minTemp = allTemps.length ? Math.min(...allTemps) : 0;
+                    const maxTemp = allTemps.length ? Math.max(...allTemps) : 1;
+
+                    const renderSpark = (vals) => {
+                      if (!vals || !vals.length) return null;
+                      const w = 120, h = 36, pad = 4;
+                      const step = (w - pad * 2) / Math.max(1, vals.length - 1);
+                      const norm = (v) => {
+                        if (maxTemp === minTemp) return h / 2;
+                        return h - pad - ((v - minTemp) / (maxTemp - minTemp)) * (h - pad * 2);
+                      };
+                      const points = vals.map((v, i) => `${pad + i * step},${norm(v)}`).join(' ');
+                      return (
+                        <svg width={w} height={h} style={{ display: 'block' }}>
+                          <polyline points={points} fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      );
+                    };
+
+                    return (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                        {times.slice(0, 7).map((t, i) => (
+                          <div key={i} style={{ padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #e6eef6' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{new Date(t).toLocaleDateString()}</div>
+                              <div style={{ fontSize: 12, color: '#64748b' }}>{precip[i] ? `${precip[i]} mm` : '—'}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 20, fontWeight: 700, color: '#ef4444' }}>{tmax[i] ?? '—'}°</div>
+                                <div style={{ fontSize: 12, color: '#64748b' }}>mín {tmin[i] ?? '—'}°</div>
+                              </div>
+                              <div style={{ width: 120 }}>
+                                {renderSpark(tmax.slice(0, 7))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+              {forecasts.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <h4>Previsões geradas</h4>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {forecasts.map((f, i) => (
+                      <div key={i} style={{ padding: 8, borderRadius: 8, background: '#fff' }}>
+                        <div><strong>{f.target}</strong> | horizonte: {f.horizon_hours}h | valor: {f.value_predicted}</div>
+                        <div style={{ fontSize: 12, color: '#64748b' }}>forecast_at: {new Date(f.timestamp_forecast).toLocaleString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <h3 style={s.cardTitle}>Análise de Previsões e Métricas</h3>
+                <div>
+                  <select
+                    style={s.select}
+                    value={selectedSiloAnalysis || ""}
+                    onChange={(e) => {
+                      setSelectedSiloAnalysis(e.target.value);
+                      if (e.target.value) loadForecastsAndMetrics(e.target.value);
+                    }}
+                  >
+                    <option value="">Selecione Silo para análise</option>
+                    {silos.map((s) => (
+                      <option key={s._id} value={s._id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {!selectedSiloAnalysis ? (
+                <div
+                  style={{
+                    padding: 20,
+                    textAlign: "center",
+                    color: "#ffffffff"
+                  }}
+                >
+                  Selecione um silo acima para ver análise de previsões e métricas.
+                </div>
+              ) : analysisLoading ? (
+                <div
+                  style={{
+                    padding: 20,
+                    textAlign: "center"
+                  }}
+                >
+                  Carregando análise...
+                </div>
+              ) : analysisError ? (
+                <div style={{ padding: 20, color: "#ef4444" }}>
+                  Erro: {analysisError}
+                </div>
+              ) : (
+                <div>
+                  {/* ===================== RESUMO DE MÉTRICAS ===================== */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h4
+                      style={{
+                        marginTop: 0,
+                        marginBottom: 12,
+                        color: "#1f2937",
+                        fontSize: 14,
+                        fontWeight: 600
+                      }}
+                    >
+                      Resumo de Métricas (últimos {analysisPeriodDays} dias)
+                    </h4>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 12
+                      }}
+                    >
+                      {/* TEMPERATURA */}
+                      <div
+                        style={{
+                          padding: 12,
+                          background: "#111827",
+                          borderRadius: 8,
+                          border: "1px solid #020617",
+                          color: "#ffffffff"
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: "#ffffffff"
+                          }}
+                        >
+                          Temperatura
+                        </div>
+
+                        {/* Texto de métricas */}
+                        <div style={{ marginTop: 8, fontSize: 11 }}>
+                          Média:{" "}
+                          <strong>
+                            {analysisMetrics?.temperature?.avg?.toFixed(1) || "—"}°C
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Mediana:{" "}
+                          <strong>
+                            {analysisMetrics?.temperature?.p50?.toFixed(1) || "—"}°C
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Min/Máx:{" "}
+                          <strong>
+                            {analysisMetrics?.temperature?.min?.toFixed(1) || "—"}°C /{" "}
+                            {analysisMetrics?.temperature?.max?.toFixed(1) || "—"}°C
+                          </strong>
+                        </div>
+
+                        {/* GRÁFICO DE COLUNAS (Média / Mediana / Min / Máx) */}
+                        {(() => {
+                          const stats = analysisMetrics?.temperature;
+                          if (!stats) return null;
+
+                          const data = {
+                            labels: ["Média", "Mediana", "Mín", "Máx"],
+                            datasets: [
+                              {
+                                label: "Temperatura (°C)",
+                                data: [
+                                  stats.avg ?? null,
+                                  stats.p50 ?? null,
+                                  stats.min ?? null,
+                                  stats.max ?? null
+                                ],
+                                backgroundColor: [
+                                  "#F97316",
+                                  "#22C55E",
+                                  "#38BDF8",
+                                  "#EF4444"
+                                ]
+                              }
+                            ]
+                          };
+
+                          const options = {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                              x: {
+                                ticks: {
+                                  color: "#E5E7EB",
+                                  font: { size: 10 }
+                                },
+                                grid: { display: false }
+                              },
+                              y: {
+                                ticks: {
+                                  color: "#E5E7EB",
+                                  font: { size: 10 }
+                                },
+                                grid: { color: "rgba(148,163,184,0.3)" }
+                              }
+                            }
+                          };
+
+                          return (
+                            <div style={{ marginTop: 10, height: 140 }}>
+                              <BarChart data={data} options={options} />
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* UMIDADE */}
+                      <div
+                        style={{
+                          padding: 12,
+                          background: "#111827",
+                          borderRadius: 8,
+                          border: "1px solid #020617",
+                          color: "#ffffffff"
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: "#ffffffff"
+                          }}
+                        >
+                          Umidade
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 11 }}>
+                          Média:{" "}
+                          <strong>
+                            {analysisMetrics?.humidity?.avg?.toFixed(1) || "—"}%
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Mediana:{" "}
+                          <strong>
+                            {analysisMetrics?.humidity?.p50?.toFixed(1) || "—"}%
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Min/Máx:{" "}
+                          <strong>
+                            {analysisMetrics?.humidity?.min?.toFixed(1) || "—"}% /{" "}
+                            {analysisMetrics?.humidity?.max?.toFixed(1) || "—"}%
+                          </strong>
+                        </div>
+
+                        {(() => {
+                          const stats = analysisMetrics?.humidity;
+                          if (!stats) return null;
+
+                          const data = {
+                            labels: ["Média", "Mediana", "Mín", "Máx"],
+                            datasets: [
+                              {
+                                label: "Umidade (%)",
+                                data: [
+                                  stats.avg ?? null,
+                                  stats.p50 ?? null,
+                                  stats.min ?? null,
+                                  stats.max ?? null
+                                ],
+                                backgroundColor: [
+                                  "#0EA5E9",
+                                  "#22C55E",
+                                  "#38BDF8",
+                                  "#1D4ED8"
+                                ]
+                              }
+                            ]
+                          };
+
+                          const options = {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                              x: {
+                                ticks: { color: "#E5E7EB", font: { size: 10 } },
+                                grid: { display: false }
+                              },
+                              y: {
+                                ticks: { color: "#E5E7EB", font: { size: 10 } },
+                                grid: { color: "rgba(148,163,184,0.3)" }
+                              }
+                            }
+                          };
+
+                          return (
+                            <div style={{ marginTop: 10, height: 140 }}>
+                              <BarChart data={data} options={options} />
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* GASES */}
+                      <div
+                        style={{
+                          padding: 12,
+                          background: "#111827",
+                          borderRadius: 8,
+                          border: "1px solid #020617",
+                          color: "#ffffffff"
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: "#ffffffff"
+                          }}
+                        >
+                          Gases
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 11 }}>
+                          Média:{" "}
+                          <strong>
+                            {analysisMetrics?.gas?.avg?.toFixed(1) || "—"} ppm
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Mediana:{" "}
+                          <strong>
+                            {analysisMetrics?.gas?.p50?.toFixed(1) || "—"} ppm
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Máxima:{" "}
+                          <strong>
+                            {analysisMetrics?.gas?.max?.toFixed(1) || "—"} ppm
+                          </strong>
+                        </div>
+
+                        {(() => {
+                          const stats = analysisMetrics?.gas;
+                          if (!stats) return null;
+
+                          const data = {
+                            labels: ["Média", "Mediana", "Mín", "Máx"],
+                            datasets: [
+                              {
+                                label: "Gases (ppm)",
+                                data: [
+                                  stats.avg ?? null,
+                                  stats.p50 ?? null,
+                                  stats.min ?? null,
+                                  stats.max ?? null
+                                ],
+                                backgroundColor: [
+                                  "#FACC15",
+                                  "#22C55E",
+                                  "#EAB308",
+                                  "#DC2626"
+                                ]
+                              }
+                            ]
+                          };
+
+                          const options = {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                              x: {
+                                ticks: { color: "#E5E7EB", font: { size: 10 } },
+                                grid: { display: false }
+                              },
+                              y: {
+                                ticks: { color: "#E5E7EB", font: { size: 10 } },
+                                grid: { color: "rgba(148,163,184,0.3)" }
+                              }
+                            }
+                          };
+
+                          return (
+                            <div style={{ marginTop: 10, height: 140 }}>
+                              <BarChart data={data} options={options} />
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* LEITURAS (composição em barras horizontais) */}
+                      <div
+                        style={{
+                          padding: 12,
+                          background: "#111827",
+                          borderRadius: 8,
+                          border: "1px solid #020617",
+                          color: "#ffffffff"
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: "#ffffffff"
+                          }}
+                        >
+                          Leituras
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 11 }}>
+                          Temperatura:{" "}
+                          <strong>
+                            {analysisMetrics?.temperature?.count || 0}
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Umidade:{" "}
+                          <strong>
+                            {analysisMetrics?.humidity?.count || 0}
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 11 }}>
+                          Gases:{" "}
+                          <strong>{analysisMetrics?.gas?.count || 0}</strong>
+                        </div>
+
+                        {(() => {
+                          const counts = {
+                            Temperatura: analysisMetrics?.temperature?.count || 0,
+                            Umidade: analysisMetrics?.humidity?.count || 0,
+                            Gases: analysisMetrics?.gas?.count || 0
+                          };
+
+                          const data = {
+                            labels: Object.keys(counts),
+                            datasets: [
+                              {
+                                label: "Qtde leituras",
+                                data: Object.values(counts),
+                                backgroundColor: ["#F97316", "#0EA5E9", "#FACC15"]
+                              }
+                            ]
+                          };
+
+                          const options = {
+                            indexAxis: "y",
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                              x: {
+                                ticks: { color: "#E5E7EB", font: { size: 10 } },
+                                grid: { color: "rgba(148,163,184,0.3)" }
+                              },
+                              y: {
+                                ticks: { color: "#E5E7EB", font: { size: 10 } },
+                                grid: { display: false }
+                              }
+                            }
+                          };
+
+                          return (
+                            <div style={{ marginTop: 10, height: 140 }}>
+                              <BarChart data={data} options={options} />
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ===================== PREVISÕES ===================== */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h4
+                      style={{
+                        marginTop: 0,
+                        marginBottom: 12,
+                        color: "#1f2937",
+                        fontSize: 14,
+                        fontWeight: 600
+                      }}
+                    >
+                      Previsões (próximos 7 dias)
+                    </h4>
+
+                    {analysisForecastByTarget &&
+                      Object.keys(analysisForecastByTarget).length > 0 ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(220px, 1fr))",
+                          gap: 12
+                        }}
+                      >
+                        {Object.entries(analysisForecastByTarget).map(
+                          ([target, arr]) => {
+                            const values = arr
+                              .map((f) => f.value_predicted)
+                              .filter(
+                                (v) => v !== null && v !== undefined
+                              );
+                            const avg =
+                              values.length > 0
+                                ? values.reduce((a, b) => a + b, 0) /
+                                values.length
+                                : null;
+                            const sorted = [...values].sort((a, b) => a - b);
+                            const median =
+                              sorted.length > 0
+                                ? sorted[Math.floor(sorted.length / 2)]
+                                : null;
+                            const min =
+                              values.length > 0
+                                ? Math.min(...values)
+                                : null;
+                            const max =
+                              values.length > 0
+                                ? Math.max(...values)
+                                : null;
+
+                            const barColor =
+                              target === "temperature"
+                                ? "#F97316"
+                                : target === "humidity"
+                                  ? "#0EA5E9"
+                                  : target === "gas"
+                                    ? "#FACC15"
+                                    : "#22C55E";
+
+                            return (
+                              <div
+                                key={target}
+                                style={{
+                                  padding: 12,
+                                  background: "#111827",
+                                  borderRadius: 8,
+                                  border: "1px solid #020617",
+                                  color: "#ffffffff"
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "#ffffffff",
+                                    marginBottom: 8
+                                  }}
+                                >
+                                  {target.toUpperCase()}
+                                </div>
+
+                                {/* Texto de resumo */}
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    color: "#ffffffff",
+                                    lineHeight: 1.6
+                                  }}
+                                >
+                                  <div>
+                                    Média prevista:{" "}
+                                    <strong>
+                                      {avg != null ? avg.toFixed(2) : "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    Mediana:{" "}
+                                    <strong>
+                                      {median != null
+                                        ? median.toFixed(2)
+                                        : "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    Intervalo:{" "}
+                                    <strong>
+                                      {min != null ? min.toFixed(2) : "—"} a{" "}
+                                      {max != null ? max.toFixed(2) : "—"}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    Previsões:{" "}
+                                    <strong>{arr.length}</strong>
+                                  </div>
+                                </div>
+
+                                {/* GRÁFICO DE COLUNAS VERTICAL DAS PREVISÕES */}
+                                {arr && arr.length > 0 && (
+                                  <div
+                                    style={{
+                                      marginTop: 10,
+                                      height: 150
+                                    }}
+                                  >
+                                    {(() => {
+                                      const labels = arr.map((p, idx2) =>
+                                        p.timestamp
+                                          ? new Date(
+                                            p.timestamp
+                                          ).toLocaleDateString(
+                                            "pt-BR",
+                                            {
+                                              day: "2-digit",
+                                              month: "2-digit"
+                                            }
+                                          )
+                                          : `${idx2 + 1}`
+                                      );
+
+                                      const data = {
+                                        labels,
+                                        datasets: [
+                                          {
+                                            label: target.toUpperCase(),
+                                            data: arr.map(
+                                              (p) =>
+                                                p.value_predicted ??
+                                                null
+                                            ),
+                                            backgroundColor:
+                                              barColor
+                                          }
+                                        ]
+                                      };
+
+                                      const options = {
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        plugins: {
+                                          legend: { display: false }
+                                        },
+                                        scales: {
+                                          x: {
+                                            ticks: {
+                                              color: "#E5E7EB",
+                                              font: { size: 9 }
+                                            },
+                                            grid: { display: false }
+                                          },
+                                          y: {
+                                            ticks: {
+                                              color: "#E5E7EB",
+                                              font: { size: 9 }
+                                            },
+                                            grid: {
+                                              color:
+                                                "rgba(148,163,184,0.3)"
+                                            }
+                                          }
+                                        }
+                                      };
+
+                                      return (
+                                        <BarChart
+                                          data={data}
+                                          options={options}
+                                        />
+                                      );
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          padding: 12,
+                          background: "#ffffffff",
+                          borderRadius: 8,
+                          color: "#000000ff"
+                        }}
+                      >
+                        Nenhuma previsão disponível ainda para este silo.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ===================== ANÁLISE TEXTUAL ===================== */}
+                  <div>
+                    <h4
+                      style={{
+                        marginTop: 0,
+                        marginBottom: 12,
+                        color: "#1f2937",
+                        fontSize: 14,
+                        fontWeight: 600
+                      }}
+                    >
+                      Análise textual e recomendações
+                    </h4>
+                    <div
+                      style={{
+                        padding: 16,
+                        background: "#ffffffff",
+                        borderRadius: 8,
+                        border: "1px solid #000000ff",
+                        fontSize: 12,
+                        color: "#000000ff",
+                        lineHeight: 1.7,
+                        whiteSpace: "pre-wrap",
+                        fontFamily: '"Monaco", "Courier New", monospace'
+                      }}
+                    >
+                      {analysisExplanation ||
+                        "Sem análise disponível para este período."}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === "silos" && (
           <div>
             <div style={s.card}>
@@ -400,13 +1672,24 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
                 <h3 style={s.cardTitle}>Criar Novo Silo</h3>
               </div>
               <div style={s.form}>
-                <input style={s.input} placeholder="Nome do Silo" value={newSilo.name} onChange={(e) => setNewSilo({...newSilo, name: e.target.value})} />
-                <input style={s.input} placeholder="Localização" value={newSilo.location} onChange={(e) => setNewSilo({...newSilo, location: e.target.value})} />
-                <input style={s.input} type="number" placeholder="Capacidade (toneladas)" value={newSilo.capacity} onChange={(e) => setNewSilo({...newSilo, capacity: e.target.value})} />
+                <input style={s.input} placeholder="Nome do Silo" value={newSilo.name} onChange={(e) => setNewSilo({ ...newSilo, name: e.target.value })} />
+                <input style={s.input} placeholder="Device ID (ThingSpeak)" value={newSilo.device_id} onChange={(e) => setNewSilo({ ...newSilo, device_id: e.target.value })} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input style={{ ...s.input, flex: 1 }} type="number" step="0.000001" placeholder="Latitude" value={newSilo.latitude} onChange={(e) => setNewSilo({ ...newSilo, latitude: e.target.value })} />
+                  <input style={{ ...s.input, flex: 1 }} type="number" step="0.000001" placeholder="Longitude" value={newSilo.longitude} onChange={(e) => setNewSilo({ ...newSilo, longitude: e.target.value })} />
+                </div>
+                <input style={s.input} type="number" placeholder="Capacidade (toneladas)" value={newSilo.capacity} onChange={(e) => setNewSilo({ ...newSilo, capacity: e.target.value })} />
+                <button style={{ ...s.buttonSmall, marginTop: 4 }} onClick={async () => {
+                  if (!navigator.geolocation) { alert('Geolocalização não suportada pelo navegador'); return; }
+                  navigator.geolocation.getCurrentPosition((pos) => {
+                    setNewSilo({ ...newSilo, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                    alert('Latitude/Longitude preenchidos com sucesso');
+                  }, (err) => { alert('Permissão negada ou erro: ' + err.message); });
+                }}>Preencher com localização atual</button>
                 <button style={s.button} onClick={createSilo}>Criar Silo</button>
               </div>
             </div>
-            
+
             <div style={s.card}>
               <div style={s.cardHeader}>
                 <h3 style={s.cardTitle}>Lista de Silos</h3>
@@ -417,8 +1700,8 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
                     <div>
                       <strong style={s.listTitle}>{silo.name}</strong>
                       <p style={s.listSubtext}>
-                        {typeof silo.location === 'object' 
-                          ? `Lat: ${silo.location.lat}, Lng: ${silo.location.lng}` 
+                        {typeof silo.location === 'object'
+                          ? `Lat: ${silo.location.lat}, Lng: ${silo.location.lng}`
                           : (silo.location || "N/A")} | Capacidade: {silo.capacity || "N/A"} ton
                       </p>
                     </div>
@@ -436,21 +1719,35 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
 
         {activeTab === "readings" && (
           <div>
-            <div style={s.card}>
-              <div style={s.cardHeader}>
-                <h3 style={s.cardTitle}>Adicionar Leitura Manual</h3>
+            {isAdmin ? (
+              <div style={s.card}>
+                <div style={s.cardHeader}>
+                  <h3 style={s.cardTitle}>Adicionar Leitura Manual</h3>
+                </div>
+                <div style={s.form}>
+                  <select style={s.select} value={newReading.silo_id} onChange={(e) => setNewReading({ ...newReading, silo_id: e.target.value })}>
+                    <option value="">Selecione o Silo</option>
+                    {silos.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                  </select>
+                  <input style={s.input} type="number" step="0.1" placeholder="Temperatura (°C)" value={newReading.temp_C} onChange={(e) => setNewReading({ ...newReading, temp_C: e.target.value })} />
+                  <input style={s.input} type="number" step="0.1" placeholder="Umidade (%)" value={newReading.rh_pct} onChange={(e) => setNewReading({ ...newReading, rh_pct: e.target.value })} />
+                  <input style={s.input} type="number" step="0.1" placeholder="CO² (ppm)" value={newReading.co2_ppm_est} onChange={(e) => setNewReading({ ...newReading, co2_ppm_est: e.target.value })} />
+                  <input style={s.input} type="number" step="1" placeholder="MQ2 (raw)" value={newReading.mq2_raw} onChange={(e) => setNewReading({ ...newReading, mq2_raw: e.target.value })} />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input style={{ ...s.input, flex: 1 }} type="number" step="0.1" placeholder="Lux" value={newReading.lux} onChange={(e) => setNewReading({ ...newReading, lux: e.target.value })} />
+                    <select style={{ ...s.select, width: 120 }} value={newReading.luminosity_alert || 0} onChange={(e) => setNewReading({ ...newReading, luminosity_alert: parseInt(e.target.value) })}>
+                      <option value={0}>Flag Lum.</option>
+                      <option value={0}>0</option>
+                      <option value={1}>1</option>
+                    </select>
+                  </div>
+                  <button style={s.button} onClick={createReading}>Adicionar Leitura</button>
+                </div>
               </div>
-              <div style={s.form}>
-                <select style={s.select} value={newReading.silo_id} onChange={(e) => setNewReading({...newReading, silo_id: e.target.value})}>
-                  <option value="">Selecione o Silo</option>
-                  {silos.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                </select>
-                <input style={s.input} type="number" step="0.1" placeholder="Temperatura (°C)" value={newReading.temp_C} onChange={(e) => setNewReading({...newReading, temp_C: e.target.value})} />
-                <input style={s.input} type="number" step="0.1" placeholder="Umidade (%)" value={newReading.rh_pct} onChange={(e) => setNewReading({...newReading, rh_pct: e.target.value})} />
-                <button style={s.button} onClick={createReading}>Adicionar Leitura</button>
-              </div>
-            </div>
-            
+            ) : (
+              <div style={s.card}><p>Somente administradores podem inserir leituras manuais.</p></div>
+            )}
+
             <div style={s.card}>
               <div style={s.cardHeader}>
                 <h3 style={s.cardTitle}>Últimas Leituras</h3>
@@ -461,10 +1758,10 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
                 </div>
                 {readings.slice(0, 20).map((reading, idx) => (
                   <div key={idx} style={s.tableRow}>
-                    <span style={{color: "#000"}}>{silos.find(sl => sl._id === reading.silo_id)?.name || reading.silo_id}</span>
-                    <span style={{color: reading.temp_C > 30 ? "#ef4444" : "#10b981"}}>{reading.temp_C}°C</span>
-                    <span style={{color: reading.rh_pct > 70 ? "#3b82f6" : "#10b981"}}>{reading.rh_pct}%</span>
-                    <span style={{color: "#000"}}>{new Date(reading.timestamp).toLocaleString('pt-BR')}</span>
+                    <span style={{ color: "#000" }}>{silos.find(sl => sl._id === reading.silo_id)?.name || reading.silo_id}</span>
+                    <span style={{ color: reading.temp_C > 30 ? "#ef4444" : "#10b981" }}>{reading.temp_C}°C</span>
+                    <span style={{ color: reading.rh_pct > 70 ? "#3b82f6" : "#10b981" }}>{reading.rh_pct}%</span>
+                    <span style={{ color: "#000" }}>{new Date(reading.timestamp).toLocaleString('pt-BR')}</span>
                   </div>
                 ))}
               </div>
@@ -480,7 +1777,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
             </div>
             <div style={s.list}>
               {alerts.length === 0 ? <p style={s.emptyState}>Nenhum alerta registrado</p> : alerts.map(alert => (
-                <div key={alert._id} style={{...s.listItem, background: alert.acknowledged ? "#f9fafb" : "#fef3c7"}}>
+                <div key={alert._id} style={{ ...s.listItem, background: alert.acknowledged ? "#f9fafb" : "#fef3c7" }}>
                   <div>
                     <strong style={s.listTitle}>{alert.message}</strong>
                     <p style={s.listSubtext}> Silo: {alert.silo_id} |  {new Date(alert.timestamp).toLocaleString('pt-BR')}</p>
@@ -499,13 +1796,13 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
                 <h3 style={s.cardTitle}>Criar Novo Usuário</h3>
               </div>
               <div style={s.form}>
-                <input style={s.input} placeholder="Nome de Usuário" value={newUser.username} onChange={(e) => setNewUser({...newUser, username: e.target.value})} />
-                <input style={s.input} type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} />
-                <input style={s.input} type="password" placeholder="Senha" value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} />
+                <input style={s.input} placeholder="Nome de Usuário" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} />
+                <input style={s.input} type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
+                <input style={s.input} type="password" placeholder="Senha" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} />
                 <button style={s.button} onClick={createUser}>Criar Usuário</button>
               </div>
             </div>
-            
+
             <div style={s.card}>
               <div style={s.cardHeader}>
                 <h3 style={s.cardTitle}>Lista de Usuários</h3>
@@ -522,7 +1819,7 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
                 ))}
               </div>
             </div>
-            
+
             <div style={s.card}>
               <div style={s.cardHeader}>
                 <h3 style={s.cardTitle}>Notificações Push</h3>
@@ -534,15 +1831,15 @@ const [authToken, setAuthToken] = useState(() => localStorage.getItem("access_to
         )}
       </MainContent>
     </Container>
-      
+
   );
 }
 
 const s = {
-  container: { 
-    display: "flex", 
-    minHeight: "100vh", 
-    
+  container: {
+    display: "flex",
+    minHeight: "100vh",
+
   },
   sidebar: {
     width: 380,
@@ -578,7 +1875,7 @@ const s = {
     color: "#e6e6e6",
     fontWeight: "500"
   },
-    metricLabelNot: {
+  metricLabelNot: {
     fontSize: 13,
     color: "#000000",
     fontWeight: "500"
@@ -786,7 +2083,7 @@ const s = {
   },
   button: {
     padding: "12px 24px",
-    background: "#238b28",
+    background: "#4f46e5",
     color: "#fff",
     border: "none",
     margin: 'auto',
@@ -916,52 +2213,30 @@ const s = {
     padding: 40,
     fontSize: 14
   }
+  ,
+  weatherControls: {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'center'
+  },
+  searchInput: {
+    padding: '8px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: 8,
+    fontSize: 14,
+    minWidth: 220
+  },
+  weatherLeft: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 6,
+    minWidth: 140
+  },
+  weatherBigTemp: {
+    fontSize: 40,
+    fontWeight: 800,
+    color: '#ef4444'
+  }
 }
 
-import styled from "styled-components";
-
-const Container = styled.div`
-  display: flex;
-  min-height: 100vh;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-  }
-`;
-
-const MainContent = styled.div` 
-    flex: 1;
-    padding: 30;
-    overflow-Y: "auto";
-    width: 70vw;
-    
-     @media (max-width: 768px) {
-    flex: 1;
-    margin: auto;
-    overflow-Y: "auto";
-    width: 80vw;
-    
-  }
-`
-
-const Tabs = styled.div`
-  display: flex;
-  gap: 8px;
-  margin-bottom: 25px;
-  border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 2px;
-  justify-content: end;
-
-  @media (max-width: 768px) {
-    display: flex;
-    gap: 3px;
-    margin-bottom: 25px;
-    border-bottom: 2px solid rgb(226, 232, 240);
-    padding-bottom: 2px;
-    justify-content: center;
-
-    button {
-      padding: 8px 12px!important;
-    }
-  }
-`;
